@@ -180,6 +180,7 @@ In n8n, activate the PR Auto-Reviewer workflow using the toggle in the top right
 
 Open a pull request in your target repository. The bot should comment within a few seconds.
 
+For full deployment instructions including VPS, Cloudflare Tunnel, and n8n Cloud options, see [DEPLOYMENT.md](DEPLOYMENT.md).
 ---
 
 ## Project structure
