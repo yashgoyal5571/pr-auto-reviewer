@@ -1,5 +1,4 @@
 {
-  "name": "PR-Reviewer",
   "nodes": [
     {
       "parameters": {
@@ -138,7 +137,16 @@
         "url": "=https://api.github.com/repos/{{ $json.body.repository.full_name }}/pulls/{{ $json.body.number }}/files",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
-        "options": {}
+        "options": {
+          "pagination": {
+            "pagination": {
+              "paginationMode": "responseContainsNextURL",
+              "nextURL": "={{ $response.headers['link']?.match(/<([^>]+)>;\\s*rel=\"next\"/)?.[1] }}",
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ !$response.headers.link || !$response.headers.link.includes('rel=\"next\"') }}"
+            }
+          }
+        }
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
@@ -158,7 +166,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const pr=$('Webhook').first().json.body.pull_request;\nconst prNumber=$('Webhook').first().json.body.number;\nconst rawInput = $input.all();\nconst files = rawInput.length > 0 && rawInput[0].json.filename ? rawInput.map(i => i.json) : [];\n\nconst prTitle=pr.title;\nconst validPrefixes = ['feat:', 'fix:', 'docs:', 'style:', 'refactor:', 'test:', 'chore:', 'perf:', 'ci:', 'build:'];\n\nlet titleCheck='❌ Title format unclear';\nfor (const prefix of validPrefixes) {\n  if(prTitle.toLowerCase().startsWith(prefix))\n  {\n    titleCheck='✅ Follows conventional commit format';\n    break;\n  }\n}\n\nlet sizeCategory='N/A';\nlet uniqueExtensions=[];\nlet sensitiveBlock='N/A';\nlet totalChange;\nlet sensitiveFiles=[];\n\n if(files.length!==0) {\n   const sensitivePatterns = [\n  'package.json',\n  'package-lock.json',\n  'yarn.lock',\n  '.env',\n  '.env.local',\n  '.env.production',\n  'requirements.txt',\n  'Dockerfile',\n  'docker-compose.yml',\n  '.github/workflows',  // CI/CD files\n];\n\n sensitiveFiles=files.filter(i=> i.filename&&sensitivePatterns.some(pattern=> i.filename.includes(pattern))).map(f=>f.filename);\n\n sensitiveBlock=(sensitiveFiles&&sensitiveFiles.length > 0) \n    ? `⚠️ **Sensitive files modified:**\\n${sensitiveFiles.map(f => `- ${f}`).join('\\n')}` \n    : \"✅ No sensitive files touched\";\n\nconst extension=files.length>0 ? files.map(i=> {\n  const parts=i.filename.split('.');\n  return parts.length>1 ? '.'+parts.at(-1):'(no ext)';\n}):[];\n\n  uniqueExtensions=[...new Set(extension)];\n\n totalChange= pr.additions+pr.deletions ;\n\nif(totalChange<50) sizeCategory='🟢 Small';\nelse if(totalChange<200) sizeCategory='🟡 Medium';\nelse if(totalChange<500) sizeCategory='🟠 Large';\nelse sizeCategory='🔴 Very Large'; \n   \n }\n else\n   sensitiveBlock = \"✅ No sensitive files touched\";\n\nlet embedColor;\n   if(sensitiveFiles.length>0)\n     embedColor = 15158332; //red\n   else if(sizeCategory.includes('Small'))\n     embedColor=3066993; //green\n   else if(sizeCategory.includes('Medium'))\n     embedColor=15844367; //yellow\n   else if(sizeCategory.includes('Very Large'))\n     embedColor=11012393; //deep red/purple\n   else if(sizeCategory.includes('Large'))\n     embedColor=15105570; //orange\n   else \n     embedColor=3447003; //blue default\n\nconst sensitiveEmbedValue = sensitiveFiles.length > 0\n  ?`⚠️ Touched:\\n${sensitiveFiles.map(f => `• ${f}`).join('\\n')}`\n  : '✅ None touched';\n\n const embedFields=[{name: 'Title Format',value: titleCheck, inline:false}];\n\nif(files.length>0) {\n  embedFields.push({ name:'Size', value: sizeCategory,inline:true });\n  embedFields.push({ name: 'Files Changed', value: String(files.length), inline:true});\n  embedFields.push({name: 'File Types', value:uniqueExtensions.join(', '), inline:true});\n  embedFields.push({name: 'Sensitive Files', value: sensitiveEmbedValue, inline:false}); \n}\n\nconst embed={\n  title:pr.title,\n  url: pr.html_url,\n  color: embedColor,\n  description: `New PR by **${pr.user.login}**`,\n  fields: embedFields,\n  footer: {text: 'PR Auto-Reviewer'},\n  timestamp: new Date().toISOString()\n};\n\n  const discordPayLoad={embeds: [embed]};\n\nconst fileLines=files.map(f=> `- \\`${f.filename}\\` (${f.status}): +${f.additions}/-${f.deletions}`).join('\\n');\n\nconst filesBreakdown= files.length!==0? `\\n**Size:** ${sizeCategory} (${totalChange} lines)\\n**Changes:**\\n${fileLines}\\n**Files Changed:** ${files.length}\\n**File Types:** ${uniqueExtensions.join(', ')}\\n\\n${sensitiveBlock}\\n\\n`:'';\n\nconst markDownComment=`## 🤖 PR Auto-Review\\n\\n**Title Format:** ${titleCheck}${filesBreakdown}---\\n*Posted by your n8n PR Auto-Reviewer*`;\n\nreturn {\n  json: {\n    reviewContent: markDownComment,\n    discordPayLoad,\n    prNumber,\n    repoFullName: $('Webhook').first().json.body.repository.full_name\n  }\n};"
+        "jsCode": "const pr=$('Webhook').first().json.body.pull_request;\nconst prNumber=$('Webhook').first().json.body.number;\nconst rawInput = $input.all();\nconst files = rawInput.length > 0 && rawInput[0].json.filename ? rawInput.map(i => i.json) : [];\n\nconst prTitle=pr.title;\nconst validPrefixes = ['feat:', 'fix:', 'docs:', 'style:', 'refactor:', 'test:', 'chore:', 'perf:', 'ci:', 'build:'];\n\nlet titleCheck='❌ Title format unclear';\nfor (const prefix of validPrefixes) {\n  if(prTitle.toLowerCase().startsWith(prefix))\n  {\n    titleCheck='✅ Follows conventional commit format';\n    break;\n  }\n}\n\nlet sizeCategory='N/A';\nlet uniqueExtensions=[];\nlet sensitiveBlock='N/A';\nlet totalChange;\nlet sensitiveFiles=[];\n\n if(files.length!==0) {\n   const sensitivePatterns = [\n  'package.json',\n  'package-lock.json',\n  'yarn.lock',\n  '.env',\n  '.env.local',\n  '.env.production',\n  'requirements.txt',\n  'Dockerfile',\n  'docker-compose.yml',\n  '.github/workflows',  // CI/CD files\n];\n\n sensitiveFiles=files.filter(i=> i.filename&&sensitivePatterns.some(pattern=> i.filename.includes(pattern))).map(f=>f.filename);\n\n sensitiveBlock = (sensitiveFiles && sensitiveFiles.length > 0) \n    ? `---\\n⚠️ **Sensitive files modified:**\\n\\n${sensitiveFiles.map(f => `- \\`${f}\\``).join('\\n')}` \n    : \"✅ No sensitive files touched\";\n\nconst extension=files.length>0 ? files.map(i=> {\n  const parts=i.filename.split('.');\n  return parts.length>1 ? '.'+parts.at(-1):'(no ext)';\n}):[];\n\n  uniqueExtensions=[...new Set(extension)];\n\n totalChange= pr.additions+pr.deletions ;\n\nif(totalChange<50) sizeCategory='🟢 Small';\nelse if(totalChange<200) sizeCategory='🟡 Medium';\nelse if(totalChange<500) sizeCategory='🟠 Large';\nelse sizeCategory='🔴 Very Large'; \n   \n }\n else\n   sensitiveBlock = \"✅ No sensitive files touched\";\n\nlet embedColor;\n   if(sensitiveFiles.length>0)\n     embedColor = 15158332; //red\n   else if(sizeCategory.includes('Small'))\n     embedColor=3066993; //green\n   else if(sizeCategory.includes('Medium'))\n     embedColor=15844367; //yellow\n   else if(sizeCategory.includes('Very Large'))\n     embedColor=11012393; //deep red/purple\n   else if(sizeCategory.includes('Large'))\n     embedColor=15105570; //orange\n   else \n     embedColor=3447003; //blue default\n\nconst sensitiveEmbedValue = sensitiveFiles.length > 0\n  ?`⚠️ Touched:\\n${sensitiveFiles.map(f => `• ${f}`).join('\\n')}`\n  : '✅ None touched';\n\n const embedFields=[{name: 'Title Format',value: titleCheck, inline:false}];\n\nif(files.length>0) {\n  embedFields.push({ name:'Size', value: sizeCategory,inline:true });\n  embedFields.push({ name: 'Files Changed', value: String(files.length), inline:true});\n  embedFields.push({name: 'File Types', value:uniqueExtensions.join(', '), inline:true});\n  embedFields.push({name: 'Sensitive Files', value: sensitiveEmbedValue, inline:false}); \n}\n\nconst embed={\n  title:pr.title,\n  url: pr.html_url,\n  color: embedColor,\n  description: `New PR by **${pr.user.login}**`,\n  fields: embedFields,\n  footer: {text: 'PR Auto-Reviewer'},\n  timestamp: new Date().toISOString()\n};\n\n  const discordPayLoad={embeds: [embed]};\n\nconst fileLines=files.map(f=> `- \\`${f.filename}\\` (${f.status}): +${f.additions}/-${f.deletions}`).join('\\n');\n\nconst filesBreakdown = files.length !== 0 \n    ? `\\n**Size:** ${sizeCategory} (${totalChange} lines)\\n**Changes:**\\n${fileLines}\\n\\n**Files Changed:** ${files.length}\\n**File Types:** ${uniqueExtensions.join(', ')}\\n\\n${sensitiveBlock}\\n\\n`\n    : '';\n\nconst markDownComment=`## 🤖 PR Auto-Review\\n\\n**Title Format:** ${titleCheck}${filesBreakdown}---\\n*Posted by your n8n PR Auto-Reviewer*`;\n\nreturn {\n  json: {\n    reviewContent: markDownComment,\n    discordPayLoad,\n    prNumber,\n    repoFullName: $('Webhook').first().json.body.repository.full_name\n  }\n};"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -174,7 +182,16 @@
         "url": "=https://api.github.com/repos/{{$json.repoFullName}}/issues/{{ $json.prNumber }}/comments",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
-        "options": {}
+        "options": {
+          "pagination": {
+            "pagination": {
+              "paginationMode": "responseContainsNextURL",
+              "nextURL": "={{ $response.headers['link']?.match(/<([^>]+)>;\\s*rel=\"next\"/)?.[1] }}",
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ !$response.headers.link || !$response.headers.link.includes('rel=\"next\"') }}"
+            }
+          }
+        }
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
@@ -259,7 +276,6 @@
       "onError": "continueRegularOutput"
     }
   ],
-  "pinData": {},
   "connections": {
     "Webhook": {
       "main": [
@@ -283,7 +299,7 @@
         ]
       ]
     },
-    "Patch Comment": {
+    "Post Comment": {
       "main": [
         [
           {
@@ -294,7 +310,7 @@
         ]
       ]
     },
-    "Post Comment": {
+    "Patch Comment": {
       "main": [
         [
           {
@@ -368,21 +384,9 @@
       ]
     }
   },
-  "active": true,
-  "settings": {
-    "executionOrder": "v1",
-    "binaryMode": "separate",
-    "availableInMCP": false,
-    "timeSavedMode": "fixed",
-    "timezone": "Asia/Kolkata",
-    "callerPolicy": "workflowsFromSameOwner"
-  },
-  "versionId": "fe3c6063-cc45-466d-9963-d6c52c23aa99",
+  "pinData": {},
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "bc3b518e3438fa93658b32c4726b4a6a9ef264ef621f5500657c694eaf632d8a"
-  },
-  "nodeGroups": [],
-  "id": "o8P9hxJ7q98WgyAT",
-  "tags": []
+  }
 }
