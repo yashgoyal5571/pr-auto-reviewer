@@ -202,6 +202,19 @@ pr-auto-reviewer/
 
 ---
 
+## 🚀 Future Roadmap & Scalability
+This project currently runs on a local Docker environment, which is perfect for development, testing, and understanding the core webhook orchestration logic.
+
+* **Current State**: Local-first development environment. The bot is active while the host machine is running.
+* **Production Roadmap**: 
+    * [ ] Migration to a persistent cloud VPS (e.g., Oracle Cloud Always Free or similar) for 24/7 uptime.
+    * [ ] Implementation of organization-level GitHub App authentication to replace Personal Access Tokens (PATs).
+    * [ ] Database integration for long-term analytics on PR trends and code-review metrics.
+
+I am treating this as a living, iterative project. If you are interested in sponsoring the cloud hosting or contributing to the production migration, please reach out via GitHub issues!
+
+---
+
 ## Author
 
 Yash Goyal — [github.com/yashgoyal5571](https://github.com/yashgoyal5571)
