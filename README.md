@@ -14,9 +14,9 @@ Live demo sandbox: [pr-reviewer-test](https://github.com/yashgoyal5571/pr-review
 
 Get immediate, structured insights wherever your team works.
 
-| PR Overview (GitHub) | Discord Notification | Slack/Telegram Alert |
-| :---: | :---: | :---: |
-| ![GitHub](assets/github.png) | ![Discord](assets/discord.png) | ![Slack](assets/slack.png) |  ![Telegram](assets/telegram.png)
+| PR Overview (GitHub) | Discord Notification | Slack Alert | Telegram Alert |
+| :---: | :---: | :---: | :---: |
+| ![GitHub](assets/github.png) | ![Discord](assets/discord.png) | ![Slack](assets/slack.png) | ![Telegram](assets/telegram.png) |
 
 ---
 
