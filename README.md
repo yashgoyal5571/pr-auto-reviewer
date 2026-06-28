@@ -1,6 +1,10 @@
 # PR Auto-Reviewer
 
-An n8n workflow that automatically reviews GitHub pull requests and posts structured feedback as a comment. Triggers on every PR open and every subsequent push. Maintains a single comment per PR using an idempotent update pattern.
+An n8n workflow that automatically reviews GitHub pull requests and posts structured feedback as a comment. Triggers on every PR open and every subsequent commit push. Maintains a single idempotent comment per PR across all commits.
+
+Sends notifications to Slack, Discord, and Telegram — any one, any two, or all three simultaneously — controlled by boolean flags in a single Edit Fields node.
+
+All webhook payloads are verified using HMAC-SHA256 signature validation before any workflow logic executes.
 
 Live demo sandbox: [pr-reviewer-test](https://github.com/yashgoyal5571/pr-reviewer-test)
 
@@ -8,15 +12,16 @@ Live demo sandbox: [pr-reviewer-test](https://github.com/yashgoyal5571/pr-review
 
 ## What it does
 
-When a pull request is opened or updated, the workflow:
+When a pull request is opened or updated:
 
-1. Fetches all changed files from the GitHub REST API
-2. Runs 6 checks against the PR data
-3. Checks if it has already commented on this PR
-4. Posts a new comment or patches the existing one
-5. Sends a color-coded embed to Discord
+1. Verifies the GitHub webhook signature using HMAC-SHA256
+2. Fetches all changed files via GitHub REST API with full pagination
+3. Runs 6 checks against the PR data
+4. Scans existing PR comments for its own hidden marker
+5. Posts a new comment or patches the existing one in place
+6. Sends a structured notification to whichever platforms are enabled
 
-The GitHub comment is updated in place on every push. No duplicate comments accumulate across multiple commits to the same PR.
+No duplicate comments accumulate across multiple commits to the same PR.
 
 ---
 
@@ -25,17 +30,38 @@ The GitHub comment is updated in place on every push. No duplicate comments accu
 | Check | Logic |
 |---|---|
 | Title format | Validates against Conventional Commits prefixes: feat, fix, docs, style, refactor, test, chore, perf, ci, build |
-| PR size | Small under 50 lines, Medium 50 to 199, Large 200 to 499, Very Large 500 and above |
+| PR size | Small under 50 lines, Medium 50–199, Large 200–499, Very Large 500+ |
 | Files changed | Per-file breakdown with filename, status, additions, and deletions |
 | File types | All unique extensions present in the PR |
 | Sensitive files | Flags package.json, package-lock.json, yarn.lock, .env, .env.local, .env.production, requirements.txt, Dockerfile, docker-compose.yml, .github/workflows |
-| Idempotency | Scans existing comments for a hidden HTML marker, patches if found, posts if not |
+| Idempotency | Scans for hidden HTML marker `<!-- pr-auto-reviewer-v1 -->`, patches if found, posts if not |
 
-Sensitive file detection overrides the size-based color. Any PR touching a sensitive file gets a red Discord embed regardless of size.
+Sensitive file detection overrides the size-based color on all platforms.
 
 ---
 
-## Discord embed colors
+## Notification platforms
+
+The Switch node runs in All Matching mode — every branch whose flag is true fires simultaneously.
+
+| Platform | Format | Color-coded |
+|---|---|---|
+| Discord | Embed with fields, footer, and timestamp | Yes |
+| Slack | Block Kit attachment with sections, fields, and View PR button | Yes |
+| Telegram | Rich Message (Bot API 10.1) with headings, table, and blockquote | No |
+
+To change which platforms fire, open the Edit Fields node and set `discord`, `slack`, `telegram` to `true` or `false`. Examples:
+
+| Desired behavior | discord | slack | telegram |
+|---|---|---|---|
+| All three | true | true | true |
+| Slack only | false | true | false |
+| Discord + Telegram | true | false | true |
+| GitHub comment only | false | false | false |
+
+---
+
+## Color logic (Discord and Slack)
 
 | Color | Condition |
 |---|---|
@@ -43,7 +69,7 @@ Sensitive file detection overrides the size-based color. Any PR touching a sensi
 | Green | Small PR, no sensitive files |
 | Yellow | Medium PR, no sensitive files |
 | Orange | Large or Very Large PR, no sensitive files |
-| Blue | No files detected (edge case default) |
+| Blue | No files detected (fallback) |
 
 ---
 
@@ -54,19 +80,34 @@ Sensitive file detection overrides the size-based color. Any PR touching a sensi
 ```
 GitHub PR event (opened or synchronize)
               |
-         Webhook (n8n)
+   Github Webhook (PR Events) (n8n)
+         Raw Body enabled
+              |
+      Verify Signature
+   HMAC-SHA256 check against
+   GITHUB_WEBHOOK_SECRET env var
+   Rejects spoofed payloads instantly
+              |
+     Set Notification Flags
+   Sets discord / slack / telegram flags
+              |
+     Is PR Opened or Sync?
+   Passes opened and synchronize only
               |
     Fetch PR Files — GitHub REST API
-    Uses repository.full_name, fork-safe
+    Paginated — all files regardless of count
               |
          Analyze PR
-    Runs all checks, builds comment body
-    and Discord embed payload
+   Runs all 6 checks
+   Builds GitHub comment, Discord embed,
+   Slack Block Kit, Telegram Rich HTML
               |
-      Get PR Comments — GitHub REST API
+    Get PR Comments — GitHub REST API
+    Paginated — all comments
               |
        Check Idempotency
-    Scans for <!-- pr-auto-reviewer-v1 -->
+   Scans for <!-- pr-auto-reviewer-v1 -->
+   Passes all payloads downstream
               |
      Comment Exists? (IF node)
       |               |
@@ -76,8 +117,11 @@ GitHub PR event (opened or synchronize)
       |               |
       +-------+-------+
               |
-       Notify Discord
-       Continue On Fail enabled
+   Route Enabled Platforms — All Matching mode
+   Fires every enabled platform in parallel
+      |            |            |
+  Notify       Notify       Notify
+  Discord      Slack        Telegram
 ```
 
 ---
@@ -102,7 +146,7 @@ File Types: (no ext), .json, .md
 
 ---
 Posted by your n8n PR Auto-Reviewer
-Last updated: 2026-06-26 20:22
+Last updated: 2026-06-28 16:51
 ```
 
 ---
@@ -111,12 +155,12 @@ Last updated: 2026-06-26 20:22
 
 | Tool | Role |
 |---|---|
-| n8n | Workflow orchestration, self-hosted via Docker Desktop |
-| Docker Desktop | Runs n8n locally |
-| ngrok | Exposes local n8n instance to GitHub webhooks |
+| n8n | Workflow orchestration, self-hosted via Docker |
 | GitHub Webhooks | Triggers the workflow on PR events |
-| GitHub REST API | Fetches changed files, posts and patches comments |
-| Discord Webhooks | Sends color-coded embed notifications |
+| GitHub REST API | Fetches changed files (paginated), posts and patches comments |
+| Discord Webhooks | Color-coded embed notifications |
+| Slack API | Block Kit attachment via chat.postMessage |
+| Telegram Bot API 10.1 | Rich Message via sendRichMessage |
 
 ---
 
@@ -124,63 +168,65 @@ Last updated: 2026-06-26 20:22
 
 ### Prerequisites
 
-- Docker Desktop installed and running
-- n8n running locally via Docker
-- ngrok installed
+- A running n8n instance with a public HTTPS URL
 - A GitHub account and a target repository
-- A Discord server with a webhook URL
+- Credentials for whichever platforms you want to enable
 
 ### Step 1 — Import the workflow
 
-Download `PR-Reviewer.json` from this repo and import it into your n8n instance via the workflow menu.
+Download `PR-Reviewer.json` from this repo and import it into your n8n instance via the top-right workflow menu.
 
-### Step 2 — Create credentials
+### Step 2 — Create the GitHub credential
 
-In n8n, go to Credentials and create one credential:
-
-**HTTP Header Auth** named `Github PAT v2`
+In n8n Credentials, create an **HTTP Header Auth** named exactly `Github PAT v2`:
 - Header Name: `Authorization`
 - Header Value: `Bearer YOUR_GITHUB_PAT`
 
-Your GitHub PAT needs `repo` scope (full repository access) to read files and write comments.
+Your GitHub PAT needs `repo` scope. Attach this credential to: Fetch PR Files, Get PR Comments, Post Comment, Patch Comment.
 
-Attach this credential to: Fetch PR Files, Get PR Comments, Post Comment, Patch Comment.
+### Step 3 — Set environment variables
 
-### Step 3 — Set the Discord webhook as an environment variable
-
-Add this to your Docker environment:
+Add these to your Docker environment or n8n Cloud Variables:
 
 ```
-DISCORD_PR_WEBHOOK_URL=https://discord.com/api/webhooks/your/webhook/url
+GITHUB_WEBHOOK_SECRET=your_generated_secret
+NODE_FUNCTION_ALLOW_BUILTIN=crypto
+DISCORD_PR_WEBHOOK_URL=https://discord.com/api/webhooks/your/url
+SLACK_PR_CHANNEL_ID=C0XXXXXXXXX
+TELEGRAM_BOT_TOKEN=your_bot_token
+TELEGRAM_CHAT_ID=your_chat_id
 ```
 
-The Notify Discord node reads `$env.DISCORD_PR_WEBHOOK_URL`. The URL is never stored in the workflow JSON.
+Only add the platform variables for platforms you intend to enable.
 
-### Step 4 — Start ngrok
-
+Generate a secure webhook secret with:
 ```bash
-ngrok http 5678
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-Copy the forwarding URL. It will look like `https://abc123.ngrok-free.app`.
+### Step 4 — Add Slack credential
 
-### Step 5 — Configure the GitHub webhook
+In n8n Credentials, create a **Slack API** credential named exactly `Slack PR-Assistant`. Paste your Bot Token (starts with `xoxb-`). The bot needs `chat:write` scope and must be added to the target channel.
 
-In your target GitHub repository, go to Settings → Webhooks → Add webhook.
+### Step 5 — Enable platforms
 
-- Payload URL: `https://your-ngrok-url/webhook/github-pr`
+Open the Edit Fields node. Set `discord`, `slack`, and `telegram` to `true` or `false`. Only platforms set to `true` receive notifications.
+
+### Step 6 — Configure the GitHub webhook
+
+In your GitHub repository: Settings → Webhooks → Add webhook
+- Payload URL: `https://your-n8n-url/webhook/github-pr`
 - Content type: `application/json`
-- Events: select Pull requests only
+- Secret: paste the same value as `GITHUB_WEBHOOK_SECRET`
+- Events: Pull requests only
+- Active: checked
 
-### Step 6 — Activate the workflow
+### Step 7 — Activate
 
-In n8n, activate the PR Auto-Reviewer workflow using the toggle in the top right. The webhook URL switches from test mode to production mode on activation.
+Toggle the workflow active in n8n. Open a test PR to verify. Check the Executions tab to confirm Verify Signature passed and all enabled platforms fired.
 
-### Step 7 — Test
+For full deployment options including VPS, Cloudflare Tunnel, and n8n Cloud, see [DEPLOYMENT.md](DEPLOYMENT.md).
 
-Open a pull request in your target repository. The bot should comment within a few seconds.
-
-For full deployment instructions including VPS, Cloudflare Tunnel, and n8n Cloud options, see [DEPLOYMENT.md](DEPLOYMENT.md).
 ---
 
 ## Project structure
@@ -188,6 +234,7 @@ For full deployment instructions including VPS, Cloudflare Tunnel, and n8n Cloud
 ```
 pr-auto-reviewer/
 ├── PR-Reviewer.json       n8n workflow export
+├── DEPLOYMENT.md          Full deployment options and instructions
 ├── assets/
 │   └── workflow.png       Workflow canvas screenshot
 └── README.md
@@ -195,24 +242,17 @@ pr-auto-reviewer/
 
 ---
 
-## Known limitations
+## Security
 
-- Runs locally on Docker Desktop. The bot is only active while the machine is on and ngrok is running.
-- ngrok free tier generates a new URL on every restart. The GitHub webhook must be updated each time.
-- No database. The bot has no memory across workflow restarts beyond what GitHub comment history provides.
+Webhook payloads are verified using HMAC-SHA256 before any logic executes. The Verify Signature node computes the expected signature using `GITHUB_WEBHOOK_SECRET` and compares it against the `x-hub-signature-256` header GitHub attaches to every delivery. Requests with missing or mismatched signatures are rejected immediately. The Raw Body option on the Webhook node ensures the signature is computed against the exact bytes GitHub signed, not a re-serialized JSON object.
 
 ---
 
-## 🚀 Future Roadmap & Scalability
-This project currently runs on a local Docker environment, which is perfect for development, testing, and understanding the core webhook orchestration logic.
+## Known limitations
 
-* **Current State**: Local-first development environment. The bot is active while the host machine is running.
-* **Production Roadmap**: 
-    * [ ] Migration to a persistent cloud VPS (e.g., Oracle Cloud Always Free or similar) for 24/7 uptime.
-    * [ ] Implementation of organization-level GitHub App authentication to replace Personal Access Tokens (PATs).
-    * [ ] Database integration for long-term analytics on PR trends and code-review metrics.
-
-I am treating this as a living, iterative project. If you are interested in sponsoring the cloud hosting or contributing to the production migration, please reach out via GitHub issues!
+- Telegram Rich Messages require Telegram Bot API 10.1 (released June 2026). Older Telegram clients receive a plain text fallback served automatically by Telegram.
+- No database. Bot state is stored entirely in GitHub comment history via the idempotency marker.
+- The bot only fires on `opened` and `synchronize` PR actions. Draft conversions, label changes, and other PR events are filtered out by the If node.
 
 ---
 
