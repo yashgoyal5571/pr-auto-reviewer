@@ -2,67 +2,8 @@
   "nodes": [
     {
       "parameters": {
-        "httpMethod": "POST",
-        "path": "github-pr",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2.1,
-      "position": [
-        -448,
-        -240
-      ],
-      "id": "4d9f945b-95d9-4c76-9b0f-6ece71e5df0a",
-      "name": "Webhook",
-      "webhookId": "604c7c14-01e5-4ce6-983c-3fa3f9719d5f"
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict",
-            "version": 3
-          },
-          "conditions": [
-            {
-              "id": "df6ee832-d4a7-4669-8e04-667ec5f5e5ca",
-              "leftValue": "={{ $json.body.action }}",
-              "rightValue": "opened",
-              "operator": {
-                "type": "string",
-                "operation": "equals"
-              }
-            },
-            {
-              "id": "ea1fb6cd-4834-4c3f-8a4c-41e60ea5d161",
-              "leftValue": "={{ $json.body.action }}",
-              "rightValue": "synchronize",
-              "operator": {
-                "type": "string",
-                "operation": "equals",
-                "name": "filter.operator.equals"
-              }
-            }
-          ],
-          "combinator": "or"
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.3,
-      "position": [
-        -240,
-        -240
-      ],
-      "id": "34ac14ab-95c7-4122-aa54-b028aa48801d",
-      "name": "If"
-    },
-    {
-      "parameters": {
         "method": "POST",
-        "url": "={{ $('Webhook').item.json.body.pull_request.comments_url }}",
+        "url": "={{ $('GitHub Webhook (PR Events)').item.json.body.pull_request.comments_url }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
@@ -79,7 +20,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        848,
+        1248,
         -144
       ],
       "id": "5c1a0c08-cfbb-41af-9c80-d2e2590da009",
@@ -120,7 +61,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        832,
+        1248,
         -384
       ],
       "id": "6c83b343-ac56-4e89-ba2d-1c78191b3baa",
@@ -134,7 +75,7 @@
     },
     {
       "parameters": {
-        "url": "=https://api.github.com/repos/{{ $json.body.repository.full_name }}/pulls/{{ $json.body.number }}/files",
+        "url": "=https://api.github.com/repos/{{ $('GitHub Webhook (PR Events)').item.json.body.repository.full_name }}/pulls/{{ $('GitHub Webhook (PR Events)').item.json.body.number }}/files",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "options": {
@@ -151,7 +92,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        -32,
+        384,
         -256
       ],
       "id": "96f8ef04-5932-4839-9527-f38012c01d2f",
@@ -163,19 +104,6 @@
           "name": "Github PAT v2"
         }
       }
-    },
-    {
-      "parameters": {
-        "jsCode": "const pr=$('Webhook').first().json.body.pull_request;\nconst prNumber=$('Webhook').first().json.body.number;\nconst rawInput = $input.all();\nconst files = rawInput.length > 0 && rawInput[0].json.filename ? rawInput.map(i => i.json) : [];\n\nconst prTitle=pr.title;\nconst validPrefixes = ['feat:', 'fix:', 'docs:', 'style:', 'refactor:', 'test:', 'chore:', 'perf:', 'ci:', 'build:'];\n\nlet titleCheck='❌ Title format unclear';\nfor (const prefix of validPrefixes) {\n  if(prTitle.toLowerCase().startsWith(prefix))\n  {\n    titleCheck='✅ Follows conventional commit format';\n    break;\n  }\n}\n\nlet sizeCategory='N/A';\nlet uniqueExtensions=[];\nlet sensitiveBlock='N/A';\nlet totalChange;\nlet sensitiveFiles=[];\n\n if(files.length!==0) {\n   const sensitivePatterns = [\n  'package.json',\n  'package-lock.json',\n  'yarn.lock',\n  '.env',\n  '.env.local',\n  '.env.production',\n  'requirements.txt',\n  'Dockerfile',\n  'docker-compose.yml',\n  '.github/workflows',  // CI/CD files\n];\n\n sensitiveFiles=files.filter(i=> i.filename&&sensitivePatterns.some(pattern=> i.filename.includes(pattern))).map(f=>f.filename);\n\n sensitiveBlock = (sensitiveFiles && sensitiveFiles.length > 0) \n    ? `---\\n⚠️ **Sensitive files modified:**\\n\\n${sensitiveFiles.map(f => `- \\`${f}\\``).join('\\n')}` \n    : \"✅ No sensitive files touched\";\n\nconst extension=files.length>0 ? files.map(i=> {\n  const parts=i.filename.split('.');\n  return parts.length>1 ? '.'+parts.at(-1):'(no ext)';\n}):[];\n\n  uniqueExtensions=[...new Set(extension)];\n\n totalChange= pr.additions+pr.deletions ;\n\nif(totalChange<50) sizeCategory='🟢 Small';\nelse if(totalChange<200) sizeCategory='🟡 Medium';\nelse if(totalChange<500) sizeCategory='🟠 Large';\nelse sizeCategory='🔴 Very Large'; \n   \n }\n else\n   sensitiveBlock = \"✅ No sensitive files touched\";\n\nlet embedColor;\n   if(sensitiveFiles.length>0)\n     embedColor = 15158332; //red\n   else if(sizeCategory.includes('Small'))\n     embedColor=3066993; //green\n   else if(sizeCategory.includes('Medium'))\n     embedColor=15844367; //yellow\n   else if(sizeCategory.includes('Very Large'))\n     embedColor=11012393; //deep red/purple\n   else if(sizeCategory.includes('Large'))\n     embedColor=15105570; //orange\n   else \n     embedColor=3447003; //blue default\n\nconst sensitiveEmbedValue = sensitiveFiles.length > 0\n  ?`⚠️ Touched:\\n${sensitiveFiles.map(f => `• ${f}`).join('\\n')}`\n  : '✅ None touched';\n\n const embedFields=[{name: 'Title Format',value: titleCheck, inline:false}];\n\nif(files.length>0) {\n  embedFields.push({ name:'Size', value: sizeCategory,inline:true });\n  embedFields.push({ name: 'Files Changed', value: String(files.length), inline:true});\n  embedFields.push({name: 'File Types', value:uniqueExtensions.join(', '), inline:true});\n  embedFields.push({name: 'Sensitive Files', value: sensitiveEmbedValue, inline:false}); \n}\n\nconst embed={\n  title:pr.title,\n  url: pr.html_url,\n  color: embedColor,\n  description: `New PR by **${pr.user.login}**`,\n  fields: embedFields,\n  footer: {text: 'PR Auto-Reviewer'},\n  timestamp: new Date().toISOString()\n};\n\n  const discordPayLoad={embeds: [embed]};\n\nconst fileLines=files.map(f=> `- \\`${f.filename}\\` (${f.status}): +${f.additions}/-${f.deletions}`).join('\\n');\n\nconst filesBreakdown = files.length !== 0 \n    ? `\\n**Size:** ${sizeCategory} (${totalChange} lines)\\n**Changes:**\\n${fileLines}\\n\\n**Files Changed:** ${files.length}\\n**File Types:** ${uniqueExtensions.join(', ')}\\n\\n${sensitiveBlock}\\n\\n`\n    : '';\n\nconst markDownComment=`## 🤖 PR Auto-Review\\n\\n**Title Format:** ${titleCheck}${filesBreakdown}---\\n*Posted by your n8n PR Auto-Reviewer*`;\n\nreturn {\n  json: {\n    reviewContent: markDownComment,\n    discordPayLoad,\n    prNumber,\n    repoFullName: $('Webhook').first().json.body.repository.full_name\n  }\n};"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        144,
-        -256
-      ],
-      "id": "3f9872ef-53dc-4a18-8800-e9f51df06ae4",
-      "name": "Analyze PR"
     },
     {
       "parameters": {
@@ -196,7 +124,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        320,
+        736,
         -256
       ],
       "id": "bff55e51-5559-4c51-96cc-81bab6d070a1",
@@ -211,12 +139,12 @@
     },
     {
       "parameters": {
-        "jsCode": "const reviewContent=$('Analyze PR').first().json;\nconst existingComments=$input.all().map(i=> i.json).filter(i=> i.body);\nconst discordPayLoad=reviewContent.discordPayLoad;\nconst prNumber=reviewContent.prNumber;\nconst repoFullName=reviewContent.repoFullName;\n\nlet existingCommentId=null;\nfor (const comment of existingComments) {\n  if(comment.body.includes(\"<!-- pr-auto-reviewer-v1 -->\")){\n  existingCommentId=comment.id;\n    break;\n  }\n}\n\nconst timestamp = $now.setZone('Asia/Kolkata').toFormat('yyyy-MM-dd HH:mm');\n\nconst finalBody=`<!-- pr-auto-reviewer-v1 -->\\n${reviewContent.reviewContent}\\n*Last updated*: ${timestamp}`;\n\nreturn [{\n  json: {\n    exists: existingCommentId!==null,\n    commentId: existingCommentId,\n    commentBody: finalBody,\n    discordPayLoad,\n    prNumber,\n    repoFullName\n  }\n}];\n\n"
+        "jsCode": "const reviewContent=$('Analyze PR').first().json;\nconst existingComments=$input.all().map(i=> i.json).filter(i=> i.body);\nconst discordPayload=reviewContent.discordPayload;\nconst slackPayload=reviewContent.slackPayload;\nconst telegramPayload=reviewContent.telegramPayload;\n\nconst prNumber=reviewContent.prNumber;\nconst repoFullName=reviewContent.repoFullName;\n\nlet existingCommentId=null;\nfor (const comment of existingComments) {\n  if(comment.body.includes(\"<!-- pr-auto-reviewer-v1 -->\")){\n  existingCommentId=comment.id;\n    break;\n  }\n}\n\nconst timestamp = $now.setZone('Asia/Kolkata').toFormat('yyyy-MM-dd HH:mm');\n\nconst finalBody=`<!-- pr-auto-reviewer-v1 -->\\n${reviewContent.reviewContent}\\n*Last updated*: ${timestamp}`;\n\nreturn [{\n  json: {\n    exists: existingCommentId!==null,\n    commentId: existingCommentId,\n    commentBody: finalBody,\n    discordPayload,\n    slackPayload,\n    telegramPayload,\n    prNumber,\n    repoFullName\n  }\n}];\n\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        480,
+        896,
         -256
       ],
       "id": "c5c5a550-f7dc-4674-80b2-1741d6232bac",
@@ -249,7 +177,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        656,
+        1072,
         -256
       ],
       "id": "1343bfa4-bb28-4dc9-83ff-aaee71d63a74",
@@ -261,49 +189,299 @@
         "url": "={{ $env.DISCORD_PR_WEBHOOK_URL }}",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ $('Check Idempotency').item.json.discordPayLoad }}",
+        "jsonBody": "={{ $('Check Idempotency').item.json.discordPayload }}",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        1072,
-        -272
+        1664,
+        -416
       ],
       "id": "b6d9cd24-5aac-4db4-8817-a2be952f786d",
       "name": "Notify Discord",
       "retryOnFail": true,
       "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendRichMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n  {\n    \"chat_id\": $env.TELEGRAM_CHAT_ID,\n    \"rich_message\": $('Check Idempotency').item.json.telegramPayload.rich_message\n  }\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1664,
+        -48
+      ],
+      "id": "66ebeb21-d5b9-4346-a943-f981a58f013a",
+      "name": "Notify Telegram",
+      "retryOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "channel",
+              "value": "={{ $env.SLACK_PR_CHANNEL_ID }}"
+            },
+            {
+              "name": "attachments",
+              "value": "={{ $('Check Idempotency').item.json.slackPayload.attachments }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1664,
+        -240
+      ],
+      "id": "3256cffb-6b36-4322-978e-98b1fad79048",
+      "name": "Notify Slack",
+      "retryOnFail": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "qvcYef5YwBj3B3Sv",
+          "name": "Discord Webhook"
+        },
+        "slackApi": {
+          "id": "rCKcnLkRFnr1tpE4",
+          "name": "Slack PR-Assistant"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const pr=$('GitHub Webhook (PR Events)').first().json.body.pull_request;\nconst prNumber=$('GitHub Webhook (PR Events)').first().json.body.number;\nconst rawInput = $input.all();\nconst files = rawInput.length > 0 && rawInput[0].json.filename ? rawInput.map(i => i.json) : [];\n\nconst prTitle=pr.title;\nconst validPrefixes = ['feat:', 'fix:', 'docs:', 'style:', 'refactor:', 'test:', 'chore:', 'perf:', 'ci:', 'build:'];\n\nlet titleCheck='❌ Title format unclear';\nfor (const prefix of validPrefixes) {\n  if(prTitle.toLowerCase().startsWith(prefix))\n  {\n    titleCheck='✅ Follows conventional commit format';\n    break;\n  }\n}\n\nlet sizeCategory='N/A';\nlet uniqueExtensions=[];\nlet sensitiveBlock='N/A';\nlet totalChange;\nlet sensitiveFiles=[];\n\n if(files.length!==0) {\n   const sensitivePatterns = [\n  'package.json',\n  'package-lock.json',\n  'yarn.lock',\n  '.env',\n  '.env.local',\n  '.env.production',\n  'requirements.txt',\n  'Dockerfile',\n  'docker-compose.yml',\n  '.github/workflows',  // CI/CD files\n];\n\n sensitiveFiles=files.filter(i=> i.filename&&sensitivePatterns.some(pattern=> i.filename.includes(pattern))).map(f=>f.filename);\n\n sensitiveBlock = (sensitiveFiles && sensitiveFiles.length > 0) \n    ? `---\\n⚠️ **Sensitive files modified:**\\n\\n${sensitiveFiles.map(f => `- \\`${f}\\``).join('\\n')}` \n    : \"✅ No sensitive files touched\";\n\nconst extension=files.length>0 ? files.map(i=> {\n  const parts=i.filename.split('.');\n  return parts.length>1 ? '.'+parts.at(-1):'(no ext)';\n}):[];\n\n  uniqueExtensions=[...new Set(extension)];\n\n totalChange= pr.additions+pr.deletions ;\n\nif(totalChange<50) sizeCategory='🟢 Small';\nelse if(totalChange<200) sizeCategory='🟡 Medium';\nelse if(totalChange<500) sizeCategory='🟠 Large';\nelse sizeCategory='🔴 Very Large'; \n   \n }\n else\n   sensitiveBlock = \"✅ No sensitive files touched\";\n\nlet embedColor;\n   if(sensitiveFiles.length>0)\n     embedColor = 15158332; //red\n   else if(sizeCategory.includes('Small'))\n     embedColor=3066993; //green\n   else if(sizeCategory.includes('Medium'))\n     embedColor=15844367; //yellow\n   else if(sizeCategory.includes('Very Large'))\n     embedColor=11012393; //deep red/purple\n   else if(sizeCategory.includes('Large'))\n     embedColor=15105570; //orange\n   else \n     embedColor=3447003; //blue default\n\nconst sensitiveEmbedValue = sensitiveFiles.length > 0\n  ?`⚠️ Touched:\\n${sensitiveFiles.map(f => `• ${f}`).join('\\n')}`\n  : '✅ None touched';\n\n const embedFields=[{name: 'Title Format',value: titleCheck, inline:false}];\n\nif(files.length>0) {\n  embedFields.push({ name:'Size', value: sizeCategory,inline:true });\n  embedFields.push({ name: 'Files Changed', value: String(files.length), inline:true});\n  embedFields.push({name: 'File Types', value:uniqueExtensions.join(', '), inline:true});\n  embedFields.push({name: 'Sensitive Files', value: sensitiveEmbedValue, inline:false}); \n}\n\nconst embed={\n  title:pr.title,\n  url: pr.html_url,\n  color: embedColor,\n  description: `New PR by **${pr.user.login}**`,\n  fields: embedFields,\n  footer: {text: 'PR Auto-Reviewer'},\n  timestamp: new Date().toISOString()\n};\n  const discordPayload={embeds: [embed]};\n\nlet slackColor;\nif (sensitiveFiles.length > 0) slackColor = '#E74C3C';\nelse if (sizeCategory.includes('Very Large')) slackColor = '#922B21';\nelse if (sizeCategory.includes('Large')) slackColor = '#E67E22';\nelse if (sizeCategory.includes('Medium')) slackColor = '#F1C40F';\nelse if (sizeCategory.includes('Small')) slackColor = '#2ECC71';\nelse slackColor = '#3498DB';\n\nconst fileLines=files.map(f=> `- \\`${f.filename}\\` (${f.status}): +${f.additions}/-${f.deletions}`).join('\\n');\n\n// Slack limits headers to 150 characters. This prevents crashes!\nconst safeTitle = pr.title.length > 150 ? pr.title.substring(0, 147) + '...' : pr.title;\n\nconst slackPayload = {\n  attachments: [\n    {\n      color: slackColor,\n      blocks: [\n        {\n          type: \"header\",\n          text: {\n            type: \"plain_text\",\n            text: safeTitle,\n            emoji: true\n          }\n        },\n        {\n          type: \"context\",\n          elements: [\n            {\n              type: \"mrkdwn\",\n              text: `Opened by *@${pr.user.login}*`\n            }\n          ]\n        },\n        {\n          type: \"divider\"\n        },\n        {\n          type: \"section\",\n          text: {\n            type: \"mrkdwn\",\n            text: `*Title Format*\\n${titleCheck}`\n          }\n        },\n        ...(files.length > 0 ? [\n          {\n            type: \"section\",\n            fields: [\n              {\n                type: \"mrkdwn\",\n                text: `*Size*\\n${sizeCategory} (${totalChange} lines)`\n              },\n              {\n                type: \"mrkdwn\",\n                text: `*Files Changed*\\n${String(files.length)}`\n              },\n              {\n                type: \"mrkdwn\",\n                text: `*File Types*\\n${uniqueExtensions.join(', ')}`\n              },\n              {\n                type: \"mrkdwn\",\n                text: `*Sensitive Files*\\n${sensitiveEmbedValue}`\n              }\n            ]\n          },\n          {\n            type: \"divider\"\n          },\n          {\n            type: \"section\",\n            text: {\n              type: \"mrkdwn\",\n              text: `*Per-File Breakdown*\\n${fileLines || '_No files_'}`\n            }\n          }\n        ] : [\n          {\n            type: \"section\",\n            text: {\n              type: \"mrkdwn\",\n              text: \"_No files to analyze for this event_\"\n            }\n          }\n        ]),\n        {\n          type: \"actions\",\n          elements: [\n            {\n              type: \"button\",\n              text: {\n                type: \"plain_text\",\n                text: \"View Pull Request\",\n                emoji: true\n              },\n              url: pr.html_url,\n              style: \"primary\"\n            }\n          ]\n        },\n        {\n          type: \"context\",\n          elements: [\n            {\n              type: \"mrkdwn\",\n              text: `n8n Auto-Reviewer • ${$now.setZone('Asia/Kolkata').toFormat('yyyy-MM-dd HH:mm')} IST`\n            }\n          ]\n        }\n      ]\n    }\n  ]\n};\n\nconst telegramFileRows = files.map(f =>\n  `<tr><td><code>${f.filename}</code></td><td>${f.status}</td><td>+${f.additions}/-${f.deletions}</td></tr>`\n).join('');\n\nconst telegramSensitiveBlock = sensitiveFiles.length > 0\n  ? `<blockquote>⚠️ <b>Sensitive Files Touched</b><br>${sensitiveFiles.map(f => `• <code>${f}</code>`).join('<br>')}</blockquote>`\n  : `<p>✅ <b>Sensitive Files:</b> None touched</p>`;\n\nconst telegramFilesSection = files.length > 0 ? `\n<h2>Size</h2>\n<p>${sizeCategory} — ${totalChange} lines changed</p>\n<h2>Per-File Breakdown</h2>\n<table>\n  <tr><th>File</th><th>Status</th><th>Changes</th></tr>\n  ${telegramFileRows}\n</table>\n<h2>File Types</h2>\n<p>${uniqueExtensions.join(', ')}</p>\n<h2>Sensitive Files</h2>\n${telegramSensitiveBlock}\n` : `<p><i>No files to analyze for this event</i></p>`;\n\nconst telegramRichHtml = `\n<h1>🤖 PR Auto-Review</h1>\n<p><a href=\"${pr.html_url}\">${pr.title}</a><br>Opened by <b>@${pr.user.login}</b></p>\n<h2>Title Format</h2>\n<p>${titleCheck}</p>\n${telegramFilesSection}\n<p><i>n8n Auto-Reviewer • ${$now.setZone('Asia/Kolkata').toFormat('yyyy-MM-dd HH:mm')} IST</i></p>\n`;\n\nconst telegramPayload = {\n\n  rich_message: { html: telegramRichHtml }\n};\n\nconst filesBreakdown = files.length !== 0 \n    ? `\\n**Size:** ${sizeCategory} (${totalChange} lines)\\n**Changes:**\\n${fileLines}\\n\\n**Files Changed:** ${files.length}\\n**File Types:** ${uniqueExtensions.join(', ')}\\n\\n${sensitiveBlock}\\n\\n`\n    : '';\n\nconst markDownComment=`## 🤖 PR Auto-Review\\n\\n**Title Format:** ${titleCheck}${filesBreakdown}---\\n*Posted by your n8n PR Auto-Reviewer*`;\n\nreturn {\n  json: {\n    reviewContent: markDownComment,\n    discordPayload,\n    slackPayload,\n    telegramPayload,\n    prNumber,\n    repoFullName: $('GitHub Webhook (PR Events)').first().json.body.repository.full_name\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        -256
+      ],
+      "id": "3f9872ef-53dc-4a18-8800-e9f51df06ae4",
+      "name": "Analyze PR"
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\n\nconst secret = $env.GITHUB_WEBHOOK_SECRET;\nconst githubSignature = $input.item.json.headers['x-hub-signature-256'];\nconst rawBody = Buffer.from($input.item.binary.data.data, 'base64').toString('utf8');\n\nif (!githubSignature) {\n  throw new Error('401: Missing x-hub-signature-256 header');\n}\n\nif (!secret) {\n  throw new Error('500: GITHUB_WEBHOOK_SECRET env var not set');\n}\n\nconst expectedSignature = 'sha256=' + crypto\n  .createHmac('sha256', secret)\n  .update(rawBody)\n  .digest('hex');\n\nif (!crypto.timingSafeEqual(\n  Buffer.from(expectedSignature, 'utf8'),\n  Buffer.from(githubSignature, 'utf8')\n)) {\n  throw new Error('401: Signature mismatch — payload rejected');\n}\n\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        -240
+      ],
+      "id": "45d2f349-bf65-4c63-bc82-53841b61977b",
+      "name": "Verify Signature"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "github-pr",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -448,
+        -240
+      ],
+      "id": "4d9f945b-95d9-4c76-9b0f-6ece71e5df0a",
+      "name": "GitHub Webhook (PR Events)",
+      "webhookId": "604c7c14-01e5-4ce6-983c-3fa3f9719d5f"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "3266fb92-0a1b-4047-836f-ee8408c2349e",
+              "name": "discord",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "670344dd-cb21-4f82-8992-e7d2b5951e6c",
+              "name": "slack",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "bcb178c1-f989-4da5-be6b-29910170e629",
+              "name": "telegram",
+              "value": true,
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -32,
+        -240
+      ],
+      "id": "5532dd0b-3c9a-45ce-a9b8-e13749fc580c",
+      "name": "Set Notification Flags"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "df6ee832-d4a7-4669-8e04-667ec5f5e5ca",
+              "leftValue": "={{ $('GitHub Webhook (PR Events)').item.json.body.action }}",
+              "rightValue": "opened",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "ea1fb6cd-4834-4c3f-8a4c-41e60ea5d161",
+              "leftValue": "={{ $('GitHub Webhook (PR Events)').item.json.body.action }}",
+              "rightValue": "synchronize",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        176,
+        -240
+      ],
+      "id": "34ac14ab-95c7-4122-aa54-b028aa48801d",
+      "name": "Is PR Opened or Sync?"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Set Notification Flags').item.json.discord}}",
+                    "rightValue": "discord",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    },
+                    "id": "e84accc8-9365-4c0e-a62a-5ef8ea1735a7"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "14499ead-273e-4f64-a271-eba03b7672c0",
+                    "leftValue": "={{ $('Set Notification Flags').item.json.slack }}",
+                    "rightValue": "slack",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "4b8e56e1-2e53-485d-9fe5-95066c9c8bc8",
+                    "leftValue": "={{ $('Set Notification Flags').item.json.telegram }}",
+                    "rightValue": "telegram",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "allMatchingOutputs": true
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1456,
+        -256
+      ],
+      "id": "515dca21-6054-4e5e-9695-722af6cc9325",
+      "name": "Route Enabled Platforms"
     }
   ],
   "connections": {
-    "Webhook": {
-      "main": [
-        [
-          {
-            "node": "If",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "If": {
-      "main": [
-        [
-          {
-            "node": "Fetch PR Files",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Post Comment": {
       "main": [
         [
           {
-            "node": "Notify Discord",
+            "node": "Route Enabled Platforms",
             "type": "main",
             "index": 0
           }
@@ -314,7 +492,7 @@
       "main": [
         [
           {
-            "node": "Notify Discord",
+            "node": "Route Enabled Platforms",
             "type": "main",
             "index": 0
           }
@@ -326,17 +504,6 @@
         [
           {
             "node": "Analyze PR",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Analyze PR": {
-      "main": [
-        [
-          {
-            "node": "Get PR Comments",
             "type": "main",
             "index": 0
           }
@@ -377,6 +544,86 @@
         [
           {
             "node": "Post Comment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze PR": {
+      "main": [
+        [
+          {
+            "node": "Get PR Comments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Signature": {
+      "main": [
+        [
+          {
+            "node": "Set Notification Flags",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GitHub Webhook (PR Events)": {
+      "main": [
+        [
+          {
+            "node": "Verify Signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Notification Flags": {
+      "main": [
+        [
+          {
+            "node": "Is PR Opened or Sync?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is PR Opened or Sync?": {
+      "main": [
+        [
+          {
+            "node": "Fetch PR Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Enabled Platforms": {
+      "main": [
+        [
+          {
+            "node": "Notify Discord",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify Slack",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify Telegram",
             "type": "main",
             "index": 0
           }
