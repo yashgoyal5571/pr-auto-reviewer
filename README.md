@@ -10,6 +10,16 @@ Live demo sandbox: [pr-reviewer-test](https://github.com/yashgoyal5571/pr-review
 
 ---
 
+## 🚀 Visual Highlights
+
+Get immediate, structured insights wherever your team works.
+
+| PR Overview (GitHub) | Discord Notification | Slack/Telegram Alert |
+| :---: | :---: | :---: |
+| ![GitHub](assets/github.png) | ![Discord](assets/discord.png) | ![Slack](assets/slack.png) |  ![Telegram](assets/telegram.png)
+
+---
+
 ## What it does
 
 When a pull request is opened or updated:
