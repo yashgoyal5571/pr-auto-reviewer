@@ -20,6 +20,13 @@ Get immediate, structured insights wherever your team works.
 
 ---
 
+## 🚀 Deployment & Hosting
+This workflow is built on n8n. In my local development environment, I currently run this via Docker on my personal machine. However, for 24/7 production reliability, this setup is designed to be highly portable. 
+
+Check out [DEPLOYMENT.md](DEPLOYMENT.md) for full details on hosting options, including cloud-based n8n instances (like n8n Cloud or self-hosted VPS) that ensure your automations run regardless of your local machine's status.
+
+---
+
 ## What it does
 
 When a pull request is opened or updated:
