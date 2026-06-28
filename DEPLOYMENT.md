@@ -159,8 +159,8 @@ This workflow is event-driven and only executes when a PR is opened or a commit 
 5. Add Slack credential: Credentials → Add → Slack API, name it `Slack PR-Assistant`, paste Bot Token
 6. Activate the workflow using the toggle in the top right
 7. Your webhook URL: `https://your-instance.app.n8n.cloud/webhook/github-pr`
-8. GITHUB_WEBHOOK_SECRET — your generated secret
-9. NODE_FUNCTION_ALLOW_BUILTIN — set this to crypto
+8. `GITHUB_WEBHOOK_SECRET` — your generated secret
+9. `NODE_FUNCTION_ALLOW_BUILTIN` — set this to `crypto`
 
 ---
 
@@ -172,7 +172,7 @@ Once your n8n instance is running and the workflow is active:
 2. Fill in:
    - Payload URL: `https://YOUR_N8N_URL/webhook/github-pr`
    - Content type: `application/json`
-   - Secret: paste your GITHUB_WEBHOOK_SECRET here
+   - Secret: paste your `GITHUB_WEBHOOK_SECRET` here
    - Events: select "Let me select individual events" → check **Pull requests** only
    - Active: checked
 3. Click Add webhook
